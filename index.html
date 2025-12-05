@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devverse — No-Skip Video Player</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f7fa;
+    }
+    h1 {
+      text-align: center;
+      color: #222;
+    }
+    .input-row {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    input, select, button {
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    button:hover {
+      opacity: 0.8;
+    }
+    #videoContainer {
+      width: 80%;
+      margin: 20px auto;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      display: block;
+    }
+    #tokenBox {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e9ffe9;
+      border-left: 4px solid #3aa655;
+      width: 80%;
+      margin-left: auto;
+      margin-right: auto;
+      display: none;
+      font-size: 18px;
+      border-radius: 6px;
+    }
+    #errorBox {
+      width: 80%;
+      margin: 10px auto;
+      padding: 10px;
+      background: #ffe3e3;
+      color: #b10000;
+      border-left: 4px solid #ff4d4d;
+      display: none;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Devverse No-Skip Video Player</h1>
+
+<div class="input-row">
+  <input type="text" id="fullName" placeholder="Your full name">
+  <input type="email" id="email" placeholder="you@gmail.com">
+</div>
+
+<div class="input-row">
+  <select id="daySelect">
+    <option value="1">Day 1</option>
+    <option value="2">Day 2</option>
+    <option value="3">Day 3</option>
+    <option value="4">Day 4</option>
+    <option value="5">Day 5</option>
+    <option value="6">Day 6</option>
+    <option value="7">Day 7</option>
+    <option value="8">Day 8</option>
+    <option value="9">Day 9</option>
+    <option value="10">Day 10</option>
+    <option value="11">Day 11</option>
+    <option value="12">Day 12</option>
+    <option value="13">Day 13</option>
+    <option value="14">Day 14</option>
+    <option value="15">Day 15</option>
+    <option value="16">Day 16</option>
+    <option value="17">Day 17</option>
+    <option value="18">Day 18</option>
+    <option value="19">Day 19</option>
+    <option value="20">Day 20</option>
+  </select>
+
+  <button id="playBtn" style="background:#28c76f;color:white;">Play</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="fullBtn">⛶ Fullscreen</button>
+</div>
+
+<div id="errorBox"></div>
+
+<div id="videoContainer">
+  <video id="video" controlsList="nodownload noplaybackrate" disablePictureInPicture>
+    Your browser does not support video.
+  </video>
+</div>
+
+<div id="tokenBox"></div>
+
+
+<script>
+/* ----------------------------- CONFIG ----------------------------- */
+
+const errorEl = document.getElementById("errorBox");
+const tokenEl = document.getElementById("tokenBox");
+const video = document.getElementById("video");
+
+/* ⭐ Archive.org URLs — Day 1 added, others placeholders ⭐ */
+const ARCHIVE_URLS = {
+  1: "https://archive.org/download/day1_20251205/day1.mp4",
+  2: "",
+  3: "",
+  4: "",
+  5: "",
+  6: "",
+  7: "",
+  8: "",
+  9: "",
+  10: "",
+  11: "",
+  12: "",
+  13: "",
+  14: "",
+  15: "",
+  16: "",
+  17: "",
+  18: "",
+  19: "",
+  20: ""
+};
+
+/* ------------------------- Error Handling Fix ---------------------- */
+
+function removeError(){
+  errorEl.style.display = "none";
+  errorEl.innerText = "";
+}
+
+/* 🔥 FIX: Alias added. clearError() no longer breaks script. */
+function clearError(){
+  return removeError();
+}
+
+function showError(msg){
+  errorEl.style.display = "block";
+  errorEl.innerText = msg;
+}
+
+/* -------------------------- Load Video ----------------------------- */
+
+function loadVideo(day){
+  const url = ARCHIVE_URLS[day];
+
+  if(!url){
+    showError("This day does not have a video yet.");
+    return false;
+  }
+
+  video.src = url;
+  video.currentTime = 0;
+  removeError();
+  tokenEl.style.display = "none";
+
+  return true;
+}
+
+/* ------------------------ No Skip Logic ---------------------------- */
+
+let lastAllowedTime = 0;
+
+video.addEventListener("timeupdate", () => {
+  if(video.currentTime > lastAllowedTime + 1){
+    video.currentTime = lastAllowedTime;
+  } else {
+    lastAllowedTime = video.currentTime;
+  }
+});
+
+video.addEventListener("ended", () => {
+  const name = document.getElementById("fullName").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const day = document.getElementById("daySelect").value;
+
+  const token = "DV-" + Math.random().toString(36).substring(2,10).toUpperCase();
+
+  tokenEl.style.display = "block";
+  tokenEl.innerHTML = `
+    <strong>Completed!</strong><br>
+    Name: ${name}<br>
+    Email: ${email}<br>
+    Day: ${day}<br>
+    Token: <strong>${token}</strong><br>
+    Time: ${new Date().toLocaleString()}
+  `;
+});
+
+/* ----------------------------- Buttons ----------------------------- */
+
+document.getElementById("playBtn").onclick = () => {
+  clearError();
+
+  let name = document.getElementById("fullName").value.trim();
+  let email = document.getElementById("email").value.trim();
+  let day = document.getElementById("daySelect").value;
+
+  if(!name || !email){
+    showError("Please enter both name and email before playing.");
+    return;
+  }
+
+  if(loadVideo(day)){
+    video.play();
+  }
+};
+
+document.getElementById("pauseBtn").onclick = () => {
+  video.pause();
+};
+
+document.getElementById("fullBtn").onclick = () => {
+  if(video.requestFullscreen){
+    video.requestFullscreen();
+  }
+};
+
+</script>
+</body>
+</html>
