@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Devverse — No-skip Advanced Player</title>
+
+<!-- Simple favicon -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'><circle cx='64' cy='64' r='64' fill='%2300b894'/><text x='64' y='78' font-size='64' font-family='Arial' font-weight='700' text-anchor='middle' fill='white'>D</text></svg>">
+
+<style>
+  :root{
+    --bg:#f3f7fb; --card:#fff; --accent:#00b894; --muted:#667085;
+    --shadow: 0 10px 30px rgba(13,38,59,0.06);
+  }
+  *{box-sizing:border-box}
+  body{font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial;background:var(--bg);margin:0;color:#0b1220}
+  .wrap{max-width:980px;margin:28px auto;padding:18px;background:var(--card);border-radius:12px;box-shadow:var(--shadow)}
+  header{display:flex;align-items:center;gap:12px}
+  h1{margin:0;font-size:18px}
+  .muted{color:var(--muted);font-size:13px}
+
+  /* layout */
+  .controls-row{display:flex;gap:12px;align-items:center;margin-top:12px}
+  input,select,button{font-size:14px;padding:10px;border-radius:8px;border:1px solid #e6edf5;background:#fff}
+  .btn{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:8px;cursor:pointer}
+  .btn.secondary{background:#f1f5f9;color:#0b1220;border:1px solid #e6edf5}
+  .player-wrap{margin-top:18px;border-radius:12px;overflow:hidden;background:#000;position:relative}
+  .video-stage{position:relative;background:#000;max-height:640px;display:flex;justify-content:center;align-items:center}
+  video{width:100%;height:auto;display:block;background:#000;outline:none}
+  /* custom controls bar */
+  .custom-controls{
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    padding:12px;
+    background:linear-gradient(180deg, rgba(0,0,0,0.05), rgba(255,255,255,0.02));
+  }
+  .progress-wrap{height:12px;background:#e6edf5;border-radius:999px;overflow:hidden;position:relative;user-select:none}
+  .progress{height:100%;width:0%;background:var(--accent);pointer-events:none}
+  .progress-buffer{position:absolute;left:0;top:0;height:100%;width:0%;background:rgba(0,0,0,0.08);pointer-events:none}
+  .ctrls{display:flex;align-items:center;gap:10px}
+  .time{color:var(--muted);font-size:13px}
+  .tokenBox{margin-top:12px;padding:12px;border-radius:8px;background:#ecfdf5;border:1px solid #c6f6d5}
+  /* non-clickable overlay to prevent mouse seeking */
+  .progress-overlay{position:absolute;left:0;right:0;top:0;bottom:0;cursor:default}
+  /* fullscreen styles ensure controls visible inside fullscreen */
+  :fullscreen .wrap, :fullscreen body { background:#000; }
+  :fullscreen .custom-controls { background: linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.2)); }
+  /* responsive */
+  @media (max-width:880px){ .wrap{margin:12px;padding:12px} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg viewBox="0 0 48 48" width="44" height="44" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#00b894"/><stop offset="1" stop-color="#0077ff"/></linearGradient></defs><rect width="48" height="48" rx="10" fill="url(#g)" /><text x="24" y="31" font-size="20" font-weight="700" text-anchor="middle" fill="#fff">D</text></svg>
+      </div>
+      <div>
+        <h1>Devverse — No-skip Advanced Player</h1>
+        <div class="muted">Students must enter name & email. Skipping forward (including fullscreen) is disabled.</div>
+      </div>
+    </header>
+
+    <div style="margin-top:12px;display:flex;gap:10px;align-items:end">
+      <div style="flex:1">
+        <label class="muted">Full name</label><br>
+        <input id="name" placeholder="Your full name" />
+      </div>
+      <div style="width:260px">
+        <label class="muted">Email</label><br>
+        <input id="email" placeholder="you@gmail.com" />
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <div>
+        <label class="muted">Select Day</label><br>
+        <select id="daySelect"></select>
+      </div>
+
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button id="playBtn" class="btn">Play</button>
+        <button id="pauseBtn" class="btn secondary">Pause</button>
+        <button id="fsBtn" class="btn secondary">⤢ Fullscreen</button>
+      </div>
+    </div>
+
+    <div class="player-wrap" id="playerWrap" aria-live="polite" style="margin-top:14px">
+      <div class="video-stage">
+        <!-- IMPORTANT: controls attribute intentionally omitted -->
+        <video id="video" playsinline webkit-playsinline disablepictureinpicture controlsList="nodownload" preload="metadata"></video>
+      </div>
+
+      <!-- Custom Controls (always visible) -->
+      <div class="custom-controls" id="customControls">
+        <div class="progress-wrap" aria-hidden="true">
+          <div class="progress-buffer" id="bufferBar"></div>
+          <div class="progress" id="progressBar"></div>
+          <!-- transparent overlay prevents pointer-driven seeking -->
+          <div class="progress-overlay" id="progressOverlay" title="Progress (read-only)"></div>
+        </div>
+
+        <div class="ctrls">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="playBtn2" class="btn" title="Play">▶</button>
+            <button id="pauseBtn2" class="btn secondary" title="Pause">⏸</button>
+          </div>
+
+          <div class="time" style="margin-left:8px" id="timeLabel">00:00 / 00:00</div>
+
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <button id="fsBtn2" class="btn secondary">Fullscreen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="muted" style="margin-top:10px;color:#b00000"></div>
+
+    <div id="tokenArea"></div>
+  </div>
+
+<script>
+/* ================= Configuration ================= */
+const DAY_COUNT = 20;
+const SEEK_TOLERANCE = 0.3; // small tolerance for tiny jumps
+const ARCHIVE_URLS = {
+  1: "https://archive.org/download/day1_20251205/day1.mp4",
+  2: "https://archive.org/download/konja-naal-poru-thalaiva-2025-hq-pre-dvd-720p-hd/Konja_Naal_Poru_Thalaiva_2025_HQ_PreDVD_720p_HD.mp4",
+  3:"",4:"",5:"",6:"",7:"",8:"",9:"",10:"",11:"",12:"",13:"",14:"",15:"",16:"",17:"",18:"",19:"",20:""
+};
+/* ================================================= */
+
+/* DOM refs */
+const nameInput = document.getElementById('name');
+const emailInput = document.getElementById('email');
+const daySelect = document.getElementById('daySelect');
+const video = document.getElementById('video');
+const playerWrap = document.getElementById('playerWrap');
+const errorEl = document.getElementById('error');
+
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const fsBtn = document.getElementById('fsBtn');
+
+const playBtn2 = document.getElementById('playBtn2');
+const pauseBtn2 = document.getElementById('pauseBtn2');
+const fsBtn2 = document.getElementById('fsBtn2');
+
+const progressBar = document.getElementById('progressBar');
+const bufferBar = document.getElementById('bufferBar');
+const timeLabel = document.getElementById('timeLabel');
+const tokenArea = document.getElementById('tokenArea');
+
+/* state */
+let lastAllowed = 0;
+let heartbeatTimer = null;
+
+/* populate days */
+for(let i=1;i<=DAY_COUNT;i++){
+  const opt = document.createElement('option'); opt.value = i; opt.textContent = 'Day ' + i; daySelect.appendChild(opt);
+}
+daySelect.value = 1;
+
+/* Helper utilities */
+function showError(msg){ errorEl.textContent = msg; }
+function clearError(){ errorEl.textContent = ''; }
+function formatTime(s){
+  if (!isFinite(s) || s < 0) return '00:00';
+  const mm = Math.floor(s/60).toString().padStart(2,'0');
+  const ss = Math.floor(s%60).toString().padStart(2,'0');
+  return `${mm}:${ss}`;
+}
+
+/* Load video URL for a given day */
+function getVideoUrlForDay(d){
+  d = Number(d);
+  if (ARCHIVE_URLS[d] && !ARCHIVE_URLS[d].startsWith('REPLACE')) return ARCHIVE_URLS[d];
+  return null;
+}
+async function loadDay(d){
+  clearError();
+  tokenArea.innerHTML = '';
+  lastAllowed = 0;
+  const url = getVideoUrlForDay(d);
+  if(!url){ showError('No video configured for Day ' + d + '.'); video.removeAttribute('src'); video.load(); return false; }
+  // set src (use metadata preload)
+  video.src = url;
+  try{ await video.load(); } catch(e){}
+  return true;
+}
+
+/* Prevent default native control usage: we never show built-in controls */
+video.controls = false;
+video.addEventListener('contextmenu', e => e.preventDefault());
+video.addEventListener('dblclick', e => e.preventDefault());
+
+/* Prevent keyboard seeks globally while video focused */
+window.addEventListener('keydown', (e)=>{
+  const blocked = ['ArrowRight','ArrowLeft','PageUp','PageDown','Home','End'];
+  if(blocked.includes(e.key)){
+    e.preventDefault();
+    return false;
+  }
+  // allow space only to toggle play/pause but prevent skipping by default
+  if(e.code === 'Space' && document.activeElement !== document.body){
+    // if focus in input fields, let it pass
+    return;
+  }
+});
+
+/* Time update: track allowed time and update progress visuals */
+video.addEventListener('timeupdate', () => {
+  const cur = video.currentTime;
+  // enforce no-forward policy
+  if (cur > lastAllowed + 0.01) {
+    lastAllowed = cur;
+  }
+  // update visual progress (non-clickable)
+  const dur = isFinite(video.duration) ? video.duration : 0;
+  const pct = dur ? (cur / dur) * 100 : 0;
+  progressBar.style.width = pct + '%';
+  // buffer estimate
+  try {
+    if (video.buffered && video.buffered.length) {
+      const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+      bufferBar.style.width = (bufferedEnd / dur) * 100 + '%';
+    } else bufferBar.style.width = '0%';
+  } catch(e){ bufferBar.style.width = '0%'; }
+  // update time label
+  timeLabel.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+});
+
+/* Seeking attempts: snap back if user tries to seek */
+video.addEventListener('seeking', () => {
+  const desired = video.currentTime;
+  if (desired > lastAllowed + SEEK_TOLERANCE) {
+    // attempted forward skip — snap back
+    video.currentTime = lastAllowed;
+  }
+});
+
+/* On ended: generate token and store locally (browser) */
+video.addEventListener('ended', () => {
+  stopHeartbeat();
+  const name = nameInput.value.trim();
+  const email = emailInput.value.trim();
+  const day = Number(daySelect.value);
+  const now = new Date();
+  const token = `DEVV-${now.getTime().toString(36).toUpperCase().slice(-10)}`;
+
+  const info = { token, name, email, day, date: now.toLocaleDateString(), time: now.toLocaleTimeString(), iso: now.toISOString() };
+  // store locally
+  try {
+    const arr = JSON.parse(localStorage.getItem('devv_tokens_v1') || '[]');
+    arr.push(info); localStorage.setItem('devv_tokens_v1', JSON.stringify(arr));
+  } catch(e){}
+
+  // show token UI
+  tokenArea.innerHTML = `
+    <div class="tokenBox">
+      <strong>Completion Token</strong><br>
+      Name: ${escapeHtml(info.name)}<br>
+      Email: ${escapeHtml(info.email)}<br>
+      Day: ${info.day}<br>
+      Token: <b>${info.token}</b><br>
+      Date & Time: ${info.date} ${info.time}<br>
+      <div style="margin-top:8px">
+        <button class="btn secondary" onclick="navigator.clipboard.writeText('${info.token}')">Copy Token</button>
+        <button class="btn" onclick="downloadToken('token_${info.token}.txt', ${JSON.stringify(info).replace(/'/g,"&#39;")})">Download</button>
+      </div>
+    </div>
+  `;
+});
+
+/* utility to download token */
+function downloadToken(filename, info){
+  const txt = `Name: ${info.name}\nEmail: ${info.email}\nDay: ${info.day}\nToken: ${info.token}\nDate: ${info.date} ${info.time}\n`;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type:'text/plain'})); a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* simple escape */
+function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* -------------------- Heartbeat (local progress) -------------------- */
+function startHeartbeat(){
+  stopHeartbeat();
+  heartbeatTimer = setInterval(()=>{
+    try{
+      const arr = JSON.parse(localStorage.getItem('devv_progress_v1') || '[]');
+      arr.push({ name: nameInput.value.trim(), email: emailInput.value.trim(), day: Number(daySelect.value), currentTime: video.currentTime, dur: isFinite(video.duration) ? video.duration : null, ts: Date.now() });
+      localStorage.setItem('devv_progress_v1', JSON.stringify(arr));
+    }catch(e){}
+  }, 7000);
+}
+function stopHeartbeat(){ if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; } }
+
+/* -------------------- Button bindings -------------------- */
+function playAction(){
+  clearError();
+  if(!nameInput.value.trim()){ showError('Enter your full name.'); return; }
+  if(!/^\S+@\S+\.\S+$/.test(emailInput.value.trim())){ showError('Enter a valid email.'); return; }
+  const ok = loadDayAndPlay();
+  if(ok) startHeartbeat();
+}
+function pauseAction(){ video.pause(); stopHeartbeat(); }
+
+playBtn.addEventListener('click', playAction);
+playBtn2.addEventListener('click', playAction);
+pauseBtn.addEventListener('click', pauseAction);
+pauseBtn2.addEventListener('click', pauseAction);
+
+/* Fullscreen: ensure our elements go fullscreen, not browser controls */
+async function toggleFullscreen(){
+  clearError();
+  if (document.fullscreenElement){
+    await document.exitFullscreen();
+    return;
+  }
+  // request fullscreen on the wrap so controls remain visible
+  try{
+    await playerWrap.requestFullscreen();
+  }catch(e){ showError('Fullscreen not supported'); }
+}
+fsBtn.addEventListener('click', toggleFullscreen);
+fsBtn2.addEventListener('click', toggleFullscreen);
+
+/* When entering fullscreen, keep our custom UI shown by changing styles (handled via CSS :fullscreen) */
+
+/* Load day and set video src; return true/false */
+async function loadDayAndPlay(){
+  const day = Number(daySelect.value);
+  const url = getVideoUrlForDay(day);
+  if(!url){
+    showError('Video not set for Day ' + day);
+    return false;
+  }
+  // set src and attempt to play (some browsers require user gesture; click is a gesture)
+  video.pause();
+  video.src = url;
+  video.load();
+  lastAllowed = 0;
+  try{
+    await video.play(); // play returns a promise
+    return true;
+  }catch(err){
+    // Some browsers block autoplay until user interacts — but we are in a user click handler so normally it should play.
+    showError('Playback blocked: ' + (err && err.message ? err.message : ''));
+    return false;
+  }
+}
+
+/* initial load for default day */
+(function(){
+  const initial = Number(daySelect.value);
+  const url = getVideoUrlForDay(initial);
+  if(url) video.src = url;
+})();
+
+/* Prevent pointer-driven seeking by overlay; but if user manipulates via devtools, attempting to seek will snap back */
+document.getElementById('progressOverlay').addEventListener('mousedown', e => { e.preventDefault(); e.stopPropagation(); });
+
+/* Also block pointer events on progress bar (non-clickable) */
+document.getElementById('progressOverlay').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+
+/* Protect against context menu / right-click actions on video area */
+playerWrap.addEventListener('contextmenu', e => e.preventDefault());
+
+/* Disable picture-in-picture attempts (some browsers still allow via double-click; we prevented dblclick earlier) */
+video.addEventListener('enterpictureinpicture', e => { e.preventDefault(); try{ document.exitPictureInPicture(); } catch(e){} });
+
+/* On load metadata update duration text */
+video.addEventListener('loadedmetadata', ()=>{
+  timeLabel.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+});
+
+/* Safety: on error show readable message */
+video.addEventListener('error', (ev)=>{
+  showError('Error loading video. Confirm the Archive.org URL is correct and publicly accessible.');
+});
+
+/* When the page visibility changes, pause to avoid playing in background */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden) { video.pause(); stopHeartbeat(); }
+});
+
+/* initial UI */
+clearError();
+
+/* End */
+</script>
+</body>
+</html>
